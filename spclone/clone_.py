@@ -6,12 +6,14 @@ directly from GitHub repositories using ZIP archives.
 """
 
 import os
+import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from urllib.parse import urlparse
 
 import requests
@@ -39,10 +41,6 @@ def parse_github_url(repo_url: str) -> Tuple[str, str]:
         
     Raises:
         GitHubError: If the URL format is invalid
-        
-    Examples:
-        >>> parse_github_url('https://github.com/psf/requests')
-        ('psf', 'requests')
     """
     try:
         # Handle different URL formats
@@ -73,6 +71,41 @@ def parse_github_url(repo_url: str) -> Tuple[str, str]:
         raise GitHubError(f"Failed to parse GitHub URL: {repo_url}") from e
 
 
+def install_build_dependencies():
+    """Install common build dependencies that might be needed."""
+    common_deps = [
+        'setuptools', 
+        'wheel', 
+        'pip',
+        'meson-python',  # For packages like pandas
+        'meson',
+        'ninja'
+    ]
+    
+    print("Installing common build dependencies...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade"] + common_deps,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("Build dependencies installed successfully!")
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Some build dependencies failed to install: {e}")
+        # Try to install essential ones individually
+        for dep in ['setuptools', 'wheel', 'pip']:
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--upgrade", dep],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+            except subprocess.CalledProcessError:
+                pass
+
+
 def download_github_zip(owner: str, repo: str, branch: str = "main") -> bytes:
     """
     Download a GitHub repository as a ZIP archive.
@@ -92,25 +125,31 @@ def download_github_zip(owner: str, repo: str, branch: str = "main") -> bytes:
     
     try:
         print(f"Downloading {zip_url}...")
-        response = requests.get(zip_url, timeout=30)
+        response = requests.get(zip_url, timeout=60)
         response.raise_for_status()
         
         if len(response.content) == 0:
             raise GitHubError(f"Downloaded ZIP file is empty for {owner}/{repo}")
         
+        print(f"Downloaded {len(response.content):,} bytes")
         return response.content
         
     except requests.exceptions.RequestException as e:
         if hasattr(e, 'response') and e.response is not None:
             if e.response.status_code == 404:
+                # Try common alternative branch names
+                alternative_branches = ['master', 'develop', 'dev']
+                if branch == 'main':
+                    print(f"Branch 'main' not found, trying alternative branches...")
+                    for alt_branch in alternative_branches:
+                        try:
+                            return download_github_zip(owner, repo, alt_branch)
+                        except GitHubError:
+                            continue
+                
                 raise GitHubError(
                     f"Repository not found: {owner}/{repo} (branch: {branch}). "
                     f"Please check if the repository exists and is public."
-                ) from e
-            elif e.response.status_code == 403:
-                raise GitHubError(
-                    f"Access denied to repository: {owner}/{repo}. "
-                    f"The repository might be private or rate-limited."
                 ) from e
         
         raise GitHubError(f"Failed to download from {zip_url}: {e}") from e
@@ -136,10 +175,12 @@ def extract_zip_to_temp(zip_content: bytes, repo: str, branch: str = "main") -> 
         zip_path = temp_dir / f"{repo}.zip"
         
         # Save ZIP file
+        print(f"Saving ZIP to temporary location...")
         with open(zip_path, "wb") as f:
             f.write(zip_content)
         
         # Extract ZIP
+        print(f"Extracting ZIP archive...")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
         
@@ -151,6 +192,7 @@ def extract_zip_to_temp(zip_content: bytes, repo: str, branch: str = "main") -> 
             extracted_dirs = [d for d in temp_dir.iterdir() if d.is_dir() and d.name != "__pycache__"]
             if extracted_dirs:
                 extracted_folder = extracted_dirs[0]
+                print(f"Using extracted directory: {extracted_folder.name}")
             else:
                 raise GitHubError(f"No valid directory found in extracted ZIP for {repo}")
         
@@ -216,7 +258,7 @@ def install_helper(owner: str, repo: str, branch: str = "main") -> None:
     
     Args:
         owner: GitHub repository owner
-        repo: Repository name
+        repo: Repository name  
         branch: Branch name (default: "main")
         
     Raises:
@@ -227,55 +269,81 @@ def install_helper(owner: str, repo: str, branch: str = "main") -> None:
     temp_parent = None
     
     try:
-        # Download ZIP
-        zip_content = download_github_zip(owner, repo, branch)
+        # For complex packages, install build dependencies first
+        complex_packages = ['pandas', 'numpy', 'scipy', 'matplotlib', 'scikit-learn']
+        if repo.lower() in complex_packages:
+            print(f"Detected complex package {repo}, installing build dependencies...")
+            install_build_dependencies()
         
-        # Extract to temporary location
+        # Download and extract
+        zip_content = download_github_zip(owner, repo, branch)
         extracted_folder = extract_zip_to_temp(zip_content, repo, branch)
         temp_parent = extracted_folder.parent
         
         # Check if it's a valid Python package
         setup_files = ['setup.py', 'pyproject.toml', 'setup.cfg']
-        if not any((extracted_folder / setup_file).exists() for setup_file in setup_files):
-            print(f"Warning: No setup files found in {owner}/{repo}. "
-                  f"This might not be a valid Python package.")
+        has_setup = any((extracted_folder / setup_file).exists() for setup_file in setup_files)
+        
+        if not has_setup:
+            print(f"Warning: No setup files found in {owner}/{repo}.")
         
         # Install the package
         print(f"Installing {owner}/{repo} from {extracted_folder}...")
         
-        # Use pip install with explicit upgrade flag
-        result = subprocess.run(
-            ["pip", "install", "--upgrade", str(extracted_folder)], 
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        # Try with build isolation first
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "--verbose", str(extracted_folder)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1800  # 30 minutes
+            )
+            print("Installation completed successfully!")
+        except subprocess.CalledProcessError:
+            # If that fails, try without build isolation
+            print("Retrying installation without build isolation...")
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "--no-build-isolation", "--verbose", str(extracted_folder)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            print("Installation completed successfully!")
         
-        print("Installation completed successfully!")
-        
-        # Show installation output if verbose
-        if result.stdout:
-            print("Installation output:")
-            print(result.stdout)
+    except subprocess.TimeoutExpired as e:
+        raise InstallationError(
+            f"Installation of {owner}/{repo} timed out. "
+            f"This package might be too complex to build from source."
+        ) from e
         
     except subprocess.CalledProcessError as e:
-        error_msg = f"Failed to install {owner}/{repo}: {e}"
+        error_msg = f"Failed to install {owner}/{repo}"
+        
         if e.stderr:
-            error_msg += f"\nError details: {e.stderr}"
+            if "mesonpy" in e.stderr.lower() or "meson-python" in e.stderr.lower():
+                error_msg += (
+                    f"\n\nMeson build system error detected. "
+                    f"The build dependencies should have been installed automatically. "
+                    f"If this error persists, try: pip install meson-python meson ninja"
+                )
+            error_msg += f"\n\nError details: {e.stderr[-1000:]}"  # Last 1000 chars
+        
         raise InstallationError(error_msg) from e
         
     except Exception as e:
         if isinstance(e, (GitHubError, InstallationError)):
             raise
-        raise InstallationError(f"Unexpected error during installation of {owner}/{repo}: {e}") from e
+        raise InstallationError(f"Unexpected error installing {owner}/{repo}: {e}") from e
         
     finally:
-        # Clean up temporary directory
+        # Clean up
         if temp_parent and temp_parent.exists():
             try:
                 shutil.rmtree(temp_parent)
             except OSError as e:
-                print(f"Warning: Failed to clean up temporary directory {temp_parent}: {e}")
+                print(f"Warning: Failed to clean up {temp_parent}: {e}")
 
 
 def install_from_github_with_url(repo_url: str, branch: str = "main") -> None:
@@ -289,10 +357,6 @@ def install_from_github_with_url(repo_url: str, branch: str = "main") -> None:
     Raises:
         GitHubError: If URL parsing or download fails
         InstallationError: If installation fails
-        
-    Examples:
-        >>> install_from_github_with_url('https://github.com/psf/requests')
-        >>> install_from_github_with_url('psf/requests')
     """
     owner, repo = parse_github_url(repo_url)
     return install_helper(owner, repo, branch=branch)
@@ -312,63 +376,25 @@ def clone_github(repo_url: str, branch: str = "main", directory: Optional[str] =
         
     Raises:
         GitHubError: If URL parsing or cloning fails
-        
-    Examples:
-        >>> clone_github('https://github.com/psf/requests')
-        >>> clone_github('psf/requests', directory='my-requests')
     """
     owner, repo = parse_github_url(repo_url)
     target_dir = Path(directory) if directory else None
     return clone_helper(owner, repo, branch=branch, target_dir=target_dir)
 
 
+# Backward compatibility functions
 def install_from_github_owner_repo(owner: str, repo: str, branch: str = "main") -> None:
-    """
-    Install a Python package from GitHub using owner and repo name.
-    
-    Args:
-        owner: GitHub repository owner
-        repo: Repository name
-        branch: Branch name (default: "main")
-        
-    Raises:
-        GitHubError: If download fails
-        InstallationError: If installation fails
-        
-    Examples:
-        >>> install_from_github_owner_repo('psf', 'requests')
-    """
+    """Install a Python package from GitHub using owner and repo name."""
     return install_helper(owner, repo, branch=branch)
 
 
 def install_from_github(repo_url: str, branch: str = "main") -> None:
-    """
-    Alias for install_from_github_with_url for backward compatibility.
-    
-    Args:
-        repo_url: GitHub repository URL or owner/repo format
-        branch: Branch name (default: "main")
-        
-    Raises:
-        GitHubError: If URL parsing or download fails
-        InstallationError: If installation fails
-    """
+    """Alias for install_from_github_with_url for backward compatibility."""
     return install_from_github_with_url(repo_url, branch=branch)
 
 
-# For backward compatibility and convenience
 def download_and_install_github_repo(repo_url: str, branch: str = "main") -> None:
-    """
-    Legacy function name - use install_from_github_with_url instead.
-    
-    Args:
-        repo_url: GitHub repository URL
-        branch: Branch name (default: "main")
-        
-    Raises:
-        GitHubError: If URL parsing or download fails
-        InstallationError: If installation fails
-    """
+    """Legacy function name - use install_from_github_with_url instead."""
     import warnings
     warnings.warn(
         "download_and_install_github_repo is deprecated, use install_from_github_with_url instead",
