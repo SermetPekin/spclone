@@ -1,6 +1,6 @@
 [project]
 name = "spclone"
-version = "0.1.15"
+version = "0.1.16"
 description = "A lightweight alternative to 'git clone' for installing Python packages directly from GitHub."
 readme = "README.md"
 requires-python = ">=3.10"
