@@ -143,6 +143,7 @@ spinstall psf/requests.git
 
 ## 🐛 Troubleshooting
 
+
 ### Installation Issues
 
 ```bash
@@ -192,6 +193,42 @@ spclone/
 └── README.md
 ```
 
+
+## 🪟 Windows Users
+
+### Build Tools Required
+
+Some Python packages (pandas, numpy, scipy, etc.) require C++ compilation on Windows. If you get errors about `vswhere.exe` or "Microsoft Visual C++ 14.0 is required":
+
+```bash
+# Check if build tools are available
+spinstall --check-build-tools
+
+# Get installation instructions
+spinstall --install-build-help
+```
+
+### Quick Fix
+
+**Option 1: Install Visual Studio Build Tools (Recommended)**
+1. Download [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+2. Install with "C++ build tools" workload
+3. Include "Windows 10/11 SDK"
+4. Restart your terminal
+
+**Option 2: Try pre-compiled packages first**
+```bash
+# Install from PyPI first (if available), then try development version
+pip install pandas  # Get stable version first
+spinstall pandas-dev/pandas  # Then try development version
+```
+
+### Common Issues
+
+- **Long paths**: Windows has path length limits - temp directories use short names
+- **File permissions**: Admin privileges may be needed for some installations
+- **Antivirus software**: May interfere with compilation - add Python folder to exclusions
+- 
 ### Contributing
 
 1. Fork the repository
