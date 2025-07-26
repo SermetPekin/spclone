@@ -1,9 +1,8 @@
 
 # spclone
 
-[![PyPI](https://img.shields.io/pypi/v/spclone.svg)](https://pypi.org/project/spclone/)
-[![Python Version](https://img.shields.io/pypi/pyversions/spclone.svg)](https://pypi.org/project/spclone/)
-[![License](https://img.shields.io/github/license/SermetPekin/spclone)](https://github.com/SermetPekin/spclone/blob/main/LICENSE)
+[![Python Package](https://github.com/SermetPekin/spclone/actions/workflows/python-package.yml/badge.svg?2)](https://github.com/SermetPekin/spclone/actions/workflows/python-package.yml)
+[![PyPI](https://img.shields.io/pypi/v/spclone)](https://img.shields.io/pypi/v/spclone) ![PyPI Downloads](https://static.pepy.tech/badge/spclone?2)![t](https://img.shields.io/badge/status-maintained-yellow.svg) [![](https://img.shields.io/github/license/SermetPekin/spclone.svg)](https://github.com/SermetPekin/spclone/blob/master/LICENSE.md) [![](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) 
 
 A lightweight CLI tool that lets you install Python packages directly from GitHub — no need to `git clone` and manually install.
 
