@@ -32,3 +32,8 @@ dev = [
     "ruff>=0.12.5"
 ]
 
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+]
+

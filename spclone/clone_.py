@@ -5,7 +5,6 @@ This module provides functions to download, clone, and install Python packages
 directly from GitHub repositories using ZIP archives.
 """
 
-import os
 import shutil
 import subprocess
 import tempfile

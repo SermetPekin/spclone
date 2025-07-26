@@ -3,6 +3,7 @@ import re
 import sys
 import platform
 from spclone.clone_ import install_from_github_with_url, clone_github
+import os 
 
 
 def normalize_github_input(input_str):

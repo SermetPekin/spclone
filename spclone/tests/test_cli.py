@@ -1,5 +1,4 @@
 import pytest
-import sys
 from unittest.mock import patch, MagicMock
 from spclone.cli import normalize_github_input, main, clone
 
