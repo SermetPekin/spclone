@@ -58,3 +58,9 @@ jobs:
         spclone --help
         spinstall --version
         spclone --version
+        spinstall pandas-dev/pandas
+        spinstall https://github.com/psf/requests
+        spclone pandas-dev/pandas
+        spclone https://github.com/psf/requests
+
+
