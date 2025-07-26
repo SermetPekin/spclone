@@ -18,25 +18,32 @@ def normalize_github_input(input_str):
         normalize_github_input('psf/requests') -> 'https://github.com/psf/requests'
         normalize_github_input('https://github.com/psf/requests') -> 'https://github.com/psf/requests'
     """
-    if not input_str:
+    if not input_str or not input_str.strip():
         raise ValueError("Repository input cannot be empty")
 
-    # Remove any trailing .git and whitespace
-    input_str = input_str.strip().rstrip(".git")
+    # Remove whitespace first
+    input_str = input_str.strip()
 
-    # If it's already a full URL, return as is
+    # If it's already a full URL, handle .git removal and return
     if input_str.startswith(("http://", "https://")):
+        if input_str.endswith('.git'):
+            input_str = input_str[:-4]
         return input_str
 
-    # If it's in owner/repo format, convert to full URL
-    if re.match(r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$", input_str):
-        return f"https://github.com/{input_str}"
-
-    # If it looks like a GitHub URL without protocol, add https
+    # If it looks like a GitHub URL without protocol, add https and handle .git
     if input_str.startswith("github.com/"):
+        if input_str.endswith('.git'):
+            input_str = input_str[:-4]
         return f"https://{input_str}"
 
-    # Otherwise, return as is and let the underlying function handle validation
+    # If it's in owner/repo format (with or without .git), convert to full URL
+    owner_repo_pattern = r"^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+(?:\.git)?$"
+    if re.match(owner_repo_pattern, input_str):
+        if input_str.endswith('.git'):
+            input_str = input_str[:-4]
+        return f"https://github.com/{input_str}"
+
+    # For anything else, return as-is (let the underlying function handle validation)
     return input_str
 
 
@@ -44,41 +51,60 @@ def main():
     """Entry point for spinstall command - install a package from GitHub."""
     parser = argparse.ArgumentParser(
         prog="spinstall",
-        description="Install a package from GitHub repository.",
+        description="Install a package from GitHub repository with support for modern build systems.",
         epilog="""Examples:
   spinstall psf/requests
+  spinstall pandas-dev/pandas
   spinstall https://github.com/psf/requests
   spinstall github.com/psf/requests
-  spinstall microsoft/vscode""",
+  spinstall microsoft/vscode --branch develop
+  spinstall pandas-dev/pandas --force-build --verbose""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
-        "repo", help="GitHub repository in 'owner/repo' format or full GitHub URL"
+        "repo", 
+        help="GitHub repository in 'owner/repo' format or full GitHub URL"
     )
 
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
+        "-v", "--verbose", 
+        action="store_true", 
+        help="Enable verbose output with detailed build information"
+    )
+
+    parser.add_argument(
+        "-b", "--branch",
+        default="main",
+        help="Branch to install from (default: main)"
+    )
+
+    parser.add_argument(
+        "--force-build",
+        action="store_true",
+        help="Force building from ZIP source instead of using git+https method for complex packages"
     )
 
     parser.add_argument(
         "--version",
         action="version",
-        version="spclone 1.0.0",  # Update this to match your actual version
+        version="spclone 1.0.0",
     )
 
     try:
         args = parser.parse_args()
 
         if args.verbose:
-            print(f"spinstall: Processing repository '{args.repo}'")
+            print(f"spinstall: Processing repository '{args.repo}' (branch: {args.branch})")
+            if args.force_build:
+                print("spinstall: Force build mode enabled")
 
         url = normalize_github_input(args.repo)
 
         if args.verbose:
             print(f"spinstall: Installing from {url}")
 
-        install_from_github_with_url(url)
+        install_from_github_with_url(url, branch=args.branch, force_build=args.force_build)
 
         if args.verbose:
             print("spinstall: Installation completed successfully")
@@ -88,6 +114,10 @@ def main():
         sys.exit(1)
     except Exception as e:
         print(f"spinstall: Error - {e}", file=sys.stderr)
+        if 'args' in locals() and hasattr(args, 'verbose') and args.verbose:
+            import traceback
+            print("\nFull traceback:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
 
@@ -98,33 +128,46 @@ def clone():
         description="Clone a repository from GitHub.",
         epilog="""Examples:
   spclone psf/requests
+  spclone pandas-dev/pandas --branch develop
   spclone https://github.com/psf/requests
   spclone github.com/psf/requests
-  spclone microsoft/vscode""",
+  spclone microsoft/vscode -d my-vscode-fork""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
-        "repo", help="GitHub repository in 'owner/repo' format or full GitHub URL"
+        "repo", 
+        help="GitHub repository in 'owner/repo' format or full GitHub URL"
     )
 
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
+        "-v", "--verbose", 
+        action="store_true", 
+        help="Enable verbose output"
     )
 
     parser.add_argument(
-        "-d",
-        "--directory",
-        help="Directory to clone into (defaults to repository name)",
+        "-b", "--branch",
+        default="main",
+        help="Branch to clone (default: main)"
     )
 
-    parser.add_argument("--version", action="version", version="spclone 1.0.0")
+    parser.add_argument(
+        "-d", "--directory",
+        help="Directory to clone into (defaults to owner-repository format)"
+    )
+
+    parser.add_argument(
+        "--version", 
+        action="version", 
+        version="spclone 1.0.0"
+    )
 
     try:
         args = parser.parse_args()
 
         if args.verbose:
-            print(f"spclone: Processing repository '{args.repo}'")
+            print(f"spclone: Processing repository '{args.repo}' (branch: {args.branch})")
 
         url = normalize_github_input(args.repo)
 
@@ -138,10 +181,12 @@ def clone():
 
         clone_signature = inspect.signature(clone_github)
 
+        # Pass all supported parameters
+        kwargs = {"branch": args.branch}
         if "directory" in clone_signature.parameters and args.directory:
-            clone_github(url, directory=args.directory)
-        else:
-            clone_github(url)
+            kwargs["directory"] = args.directory
+
+        clone_github(url, **kwargs)
 
         if args.verbose:
             print("spclone: Clone completed successfully")
@@ -151,6 +196,10 @@ def clone():
         sys.exit(1)
     except Exception as e:
         print(f"spclone: Error - {e}", file=sys.stderr)
+        if 'args' in locals() and hasattr(args, 'verbose') and args.verbose:
+            import traceback
+            print("\nFull traceback:", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
 
