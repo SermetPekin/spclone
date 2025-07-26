@@ -1,10 +1,10 @@
 [project]
 name = "spclone"
-version = "0.1.6"
+version = "0.1.8"
 description = "A lightweight alternative to 'git clone' for installing Python packages directly from GitHub."
 readme = "README.md"
 requires-python = ">=3.10"
-
+license = { file = "LICENSE" }    
 authors = [
     { name = "Sermet Pekin", email = "Sermet.Pekin@gmail.com" }
 ]
@@ -16,6 +16,13 @@ dependencies = [
 [project.scripts]
 spclone = "spclone.cli:clone"
 spinstall = "spclone.cli:main"
+
+[project.urls]
+Repository = "https://github.com/SermetPekin/spclone"
+Homepage = "https://github.com/SermetPekin/spclone"
+Documentation = "https://github.com/SermetPekin/spclone"
+Issues = "https://github.com/SermetPekin/spclone/issues"
+Changelog = "https://github.com/SermetPekin/spclone/releases"
 
 [tool.pdm.dev-dependencies]
 dev = [
