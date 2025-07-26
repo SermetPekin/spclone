@@ -27,11 +27,23 @@ pip install spclone
 
 ## Examples
 
-```
+
+### install 
+```bash
+
 spinstall pandas-dev/pandas
 spinstall https://github.com/psf/requests
+
 ```
 
+### clone 
+
+```bash
+
+spclone pandas-dev/pandas
+spclone https://github.com/psf/requests
+
+```
 ## Development 
 
 ```bash
