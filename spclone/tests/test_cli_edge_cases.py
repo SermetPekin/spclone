@@ -18,9 +18,8 @@ def reset_sys_argv():
 @pytest.fixture
 def mock_functions():
     """Mock the core functions to prevent actual GitHub operations during tests."""
-    with patch('spclone.cli.install_from_github_with_url') as mock_install, \
-         patch('spclone.cli.clone_github') as mock_clone:
-        yield {
-            'install': mock_install,
-            'clone': mock_clone
-        }
+    with (
+        patch("spclone.cli.install_from_github_with_url") as mock_install,
+        patch("spclone.cli.clone_github") as mock_clone,
+    ):
+        yield {"install": mock_install, "clone": mock_clone}
