@@ -1,6 +1,6 @@
 [project]
 name = "spclone"
-version = "0.1.11"
+version = "0.1.17.dev1"
 description = "A lightweight alternative to 'git clone' for installing Python packages directly from GitHub."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,5 +30,10 @@ dev = [
     "flake8>=7.3.0",
     "pytest>=8.4.1",
     "ruff>=0.12.5"
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
 ]
 

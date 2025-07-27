@@ -13,6 +13,8 @@ venv/
 ENV/
 *.env
 *.venv
+ignore_*.*
+ignore*/
 
 # Jupyter/IPython history (if any)
 .ipynb_checkpoints
